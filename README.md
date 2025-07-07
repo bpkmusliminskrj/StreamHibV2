@@ -49,7 +49,7 @@ Ini adalah bagian di mana Anda membuat instans StreamHibV2 terpisah untuk setiap
     * **Unduh** skrip installer **terbaru:**
 
         ```bash
-        wget https://raw.githubusercontent.com/bpkmusliminskrj/StreamHibV2/main/install_streamhib.sh
+        wget https://raw.githubusercontent.com/bpkmusliminskrj/StreamHibV2/master/install_streamhib.sh
         chmod +x install_streamhib.sh
         
         ```

@@ -1815,33 +1815,24 @@ def delete_video_api():
 @login_required
 def disk_usage_api():
     try:
-        # Kita akan mendapatkan informasi kuota menggunakan repquota untuk user spesifik
-        # DEVICE harus sesuai dengan fstab Anda, biasanya / atau device root
-        # Kita perlu menjalankan ini sebagai root karena quota memerlukan izin root
+        # --- Bagian yang Dimodifikasi: Penentuan Device Path ---
+        device_path_for_quota = None
         
-        # Dapatkan device tempat VIDEO_DIR berada
-        # Ini lebih robust daripada hanya '/dev/sda1'
+        # Cara yang lebih andal untuk mendapatkan device path dari output 'mount' untuk root filesystem
         try:
-            # Gunakan realpath untuk menangani symlink jika VIDEO_DIR adalah symlink
-            video_dir_realpath = os.path.realpath(VIDEO_DIR)
-            result = subprocess.run(['df', '-P', video_dir_realpath], capture_output=True, text=True, check=True)
-            device_line = result.stdout.strip().split('\n')[1] # Ambil baris kedua (setelah header)
-            device_path = device_line.split()[0] # Kolom pertama adalah nama device
+            mount_output = subprocess.run(['mount'], capture_output=True, text=True, check=True).stdout
+            for line in mount_output.splitlines():
+                if ' on / ' in line: # Cari baris yang mount ke root (/)
+                    device_path_for_quota = line.split(' ')[0] # Ambil nama device dari kolom pertama
+                    break
             
-            # Khusus untuk root partition, beberapa sistem bisa menampilkan '/' sebagai device
-            # Kita perlu memastikan nama device yang benar untuk repquota
-            if device_path == '/':
-                # Coba dapatkan device root dari mount
-                mount_output = subprocess.run(['mount'], capture_output=True, text=True, check=True).stdout
-                for line in mount_output.splitlines():
-                    if ' on / ' in line:
-                        device_path = line.split(' ')[0]
-                        break
-            
-            logging.info(f"Detected device for VIDEO_DIR ({VIDEO_DIR}): {device_path}")
+            if not device_path_for_quota:
+                raise ValueError("Could not find root filesystem device from 'mount' output. Please ensure root partition is mounted.")
+
+            logging.info(f"Detected root filesystem device for quota: {device_path_for_quota}")
 
         except Exception as e:
-            logging.error(f"Failed to detect disk device for quota: {e}", exc_info=True)
+            logging.error(f"Failed to detect root disk device for quota: {e}", exc_info=True)
             # Fallback ke system-wide disk usage jika deteksi device gagal
             t, u, f = shutil.disk_usage(VIDEO_DIR)
             tg, ug, fg = t / (2 ** 30), u / (2 ** 30), f / (2 ** 30)
@@ -1857,9 +1848,8 @@ def disk_usage_api():
             })
 
         # Jalankan repquota untuk pengguna spesifik
-        # Perhatikan: Perintah ini perlu dijalankan sebagai root atau memiliki setuid bit
-        # Karena aplikasi Anda berjalan sebagai root, ini seharusnya tidak masalah.
-        quota_cmd = ["repquota", "-u", SYSTEM_USER_FOR_QUOTA, device_path]
+        # Sekarang menggunakan device_path_for_quota yang seharusnya benar (misal /dev/sda1)
+        quota_cmd = ["repquota", "-u", SYSTEM_USER_FOR_QUOTA, device_path_for_quota]
         logging.info(f"Executing quota command: {' '.join(quota_cmd)}")
         
         # Perhatikan: jika repquota tidak menemukan pengguna atau tidak ada kuota yang disetel,
@@ -1868,10 +1858,6 @@ def disk_usage_api():
 
         if result.returncode != 0:
             logging.warning(f"Quota check for user '{SYSTEM_USER_FOR_QUOTA}' failed (Code: {result.returncode}). Stderr: {result.stderr.strip()}", exc_info=True)
-            
-            # Jika user tidak ditemukan, atau kuota belum disetel dengan benar,
-            # kita bisa fallback ke membaca penggunaan disk secara umum (system-wide)
-            # atau mengembalikan nilai default (misal 30GB sebagai total)
             
             # --- Opsi Fallback 1: Gunakan shutils.disk_usage jika quota gagal ---
             logging.info("Falling back to shutil.disk_usage for disk usage info.")
@@ -1886,23 +1872,13 @@ def disk_usage_api():
                 'used': round(ug, 2),
                 'free': round(fg, 2),
                 'percent_used': round(pu, 2),
-                'message': f"Failed to get user quota for '{SYSTEM_USER_FOR_QUOTA}'. Showing system-wide usage instead. Ensure quota is enabled and user has quota set on {device_path}."
+                'message': f"Failed to get user quota for '{SYSTEM_USER_FOR_QUOTA}'. Showing system-wide usage instead. Ensure quota is enabled and user has quota set on {device_path_for_quota}."
             })
-            
-            # --- Opsi Fallback 2 (Alternatif): Tampilkan kuota default hardcoded ---
-            # Jika Anda yakin kuota selalu 30GB, Anda bisa hardcode totalnya di sini
-            # max_quota_gb = 30
-            # current_used_gb = ... (Anda tetap perlu menghitung ini dari disk_usage() atau dari repquota output yang parsial)
-            # Namun, ini kurang akurat jika kuota berubah atau tidak aktif.
-            # Jadi, Opsi 1 di atas lebih disarankan.
 
         # Menguraikan output repquota
-        # Contoh output repquota -u <user> /dev/vda1
-        # Block limits                                       File limits
-        #           used    soft    hard  grace     used  soft  hard  grace
-        # root    576212  31457280 36700160          17833     0     0       
+        # Contoh output repquota -u <user> /dev/sda1 dari log Anda:
+        # streamhib_utama --    1116 31457280 36700160             65     0     0
         lines = result.stdout.splitlines()
-        # Cari baris yang mengandung nama user
         user_line = [line for line in lines if SYSTEM_USER_FOR_QUOTA in line]
 
         if not user_line:
@@ -1921,18 +1897,22 @@ def disk_usage_api():
             })
 
         user_line = user_line[0]
-        # Regex untuk mengekstrak angka. Pola bisa berbeda tergantung versi quota.
-        # Kita mencari: digunakan, soft_limit, hard_limit
-        # Cari urutan angka di baris yang relevan.
-        # Format umum: user_name  used_blocks  soft_limit  hard_limit
-        # Kita tahu soft limit adalah 30GB, hard limit 35GB (di setquota)
-        # Ambil 3 angka pertama setelah nama user: used, soft, hard
         
-        # Cari semua angka berturut-turut setelah nama user
-        numbers = [int(n) for n in re.findall(r'\s+(\d+)\s+', user_line.replace(SYSTEM_USER_FOR_QUOTA, '', 1))] # Ganti nama user sekali saja
+        # Ekstrak angka: digunakan, soft_limit, hard_limit
+        # Memisahkan string berdasarkan spasi dan memfilter entri kosong.
+        parts = [p for p in user_line.split(' ') if p.strip()]
 
-        if len(numbers) < 3: # Membutuhkan setidaknya used, soft, hard
-            logging.error(f"Not enough numbers parsed from quota output for '{SYSTEM_USER_FOR_QUOTA}'. Line: '{user_line}' Numbers: {numbers}. Fallback to system-wide usage.")
+        # Berdasarkan output repquota -a Anda:
+        # streamhib_utama --    1116 31457280 36700160             65     0     0
+        # Index:           0       1    2        3        4           5      6  7  8
+        # Jadi used_kb ada di parts[2], soft_limit_kb di parts[3], hard_limit_kb di parts[4].
+        
+        try:
+            used_kb = int(parts[2]) # Penggunaan dalam KB
+            soft_limit_kb = int(parts[3]) # Soft limit dalam KB
+            hard_limit_kb = int(parts[4]) # Hard limit dalam KB
+        except (IndexError, ValueError) as e:
+            logging.error(f"Failed to parse numbers from quota output for '{SYSTEM_USER_FOR_QUOTA}'. Line: '{user_line}'. Error: {e}. Fallback to system-wide usage.")
             t, u, f = shutil.disk_usage(VIDEO_DIR)
             tg, ug, fg = t / (2 ** 30), u / (2 ** 30), f / (2 ** 30)
             pu = (u / t) * 100 if t > 0 else 0
@@ -1946,10 +1926,6 @@ def disk_usage_api():
                 'message': "Failed to parse quota output, showing system-wide usage."
             })
             
-        used_kb = numbers[0]
-        soft_limit_kb = numbers[1]
-        hard_limit_kb = numbers[2]
-
         total_gb = round(soft_limit_kb / (1024 * 1024), 2)  # Konversi dari KB ke GB
         used_gb = round(used_kb / (1024 * 1024), 2)
         

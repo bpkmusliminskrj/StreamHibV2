@@ -137,7 +137,7 @@ if [ -d "${INSTANCE_DIR}" ]; then
     print_warning "Direktori ${INSTANCE_DIR} sudah ada, menghapus..."
     rm -rf "${INSTANCE_DIR}"
 fi
-git clone https://github.com/gawenyikat/StreamHibV2.git "${INSTANCE_DIR}"
+git clone https://github.com/bpkmusliminskrj/StreamHibV2.git "${INSTANCE_DIR}"
 check_command "Clone repository ke ${INSTANCE_DIR}"
 
 cd "${INSTANCE_DIR}"

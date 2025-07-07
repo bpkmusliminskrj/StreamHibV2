@@ -904,7 +904,14 @@ def get_active_sessions_data():
         output = subprocess.check_output(["systemctl", "list-units", "--type=service", "--state=running"], text=True)
         all_sessions_data = read_sessions() 
         active_sessions_list = []
-        active_services_systemd = {line.split()[0] for line in output.strip().split('\n') if "stream-" in line}
+        expected_service_prefix = f"stream-{INSTANCE_NAME_IDENTIFIER}-"
+        
+        active_services_systemd = {
+            line.split()[0] 
+            for line in output.strip().split('\n') 
+            if line.split()[0].startswith(expected_service_prefix) # Filter berdasarkan prefix instans
+            and "stream-" in line # Pastikan itu adalah layanan streamhib
+        }
         json_active_sessions = all_sessions_data.get('active_sessions', [])
         needs_json_update = False
 

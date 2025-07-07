@@ -24,6 +24,7 @@ import time
 import paramiko
 import scp
 import threading
+import sys
 
 # Dapatkan DIRECTORY_BASE dari variabel lingkungan atau gunakan default
 # Ini akan menjadi direktori akar untuk instans StreamHibV2 ini (misal /root/StreamHibV2-user1)
@@ -52,8 +53,11 @@ LOG_FILE_PATH = os.path.join(DIRECTORY_BASE, 'streamhib_instance.log') # Jalur f
 logging.basicConfig(
     level=logging.DEBUG, # Level logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     format='%(asctime)s [%(levelname)s] %(message)s',
-    filename=LOG_FILE_PATH, # Arahkan log ke file spesifik instans
-    filemode='a' # Mode 'a' untuk append (menambahkan ke file yang sudah ada)
+    # Tambahkan 'handlers' ini untuk memastikan log juga ke stdout
+    handlers=[
+        logging.FileHandler(LOG_FILE_PATH, mode='a'),
+        logging.StreamHandler(sys.stdout) # Ini akan mengirim log ke stdout (yang ditangkap journalctl)
+    ]
 )
 # ---- Mulai Penambahan Kode Baru di Sini untuk Kuota ----
 # Ekstrak nama pengguna instance dari nama direktori, misalnya "user1" dari "/root/StreamHibV2-user1"

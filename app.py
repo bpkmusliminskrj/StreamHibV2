@@ -889,56 +889,58 @@ def get_videos_list_data():
 
 def get_active_sessions_data():
     try:
-        # DEBUG: Log identifier
+        # STEP 1: Logging identifier
         logging.debug(f"[DEBUG] INSTANCE_NAME_IDENTIFIER = {INSTANCE_NAME_IDENTIFIER!r}")
 
+        # STEP 2: Ambil daftar service yang sedang aktif
         output = subprocess.check_output(
             ["systemctl", "list-units", "--type=service", "--state=running"],
             text=True
         )
 
-        # DEBUG: Log semua layanan aktif
+        # STEP 3: Tampilkan semua baris systemctl (debug)
         for line in output.strip().split('\n'):
             logging.debug(f"[DEBUG] Systemd line: {line}")
 
-        # Gunakan filter fleksibel: cek apakah ada nama instans di nama layanan
+        # STEP 4: Filter service berdasarkan prefix
+        expected_service_prefix = f"stream-{INSTANCE_NAME_IDENTIFIER}-"
         active_services_systemd = {
             line.split()[0]
             for line in output.strip().split('\n')
-            if INSTANCE_NAME_IDENTIFIER in line and "stream" in line
+            if line.split()[0].startswith(expected_service_prefix)
         }
 
-        # DEBUG: Log hasil filter
+        # STEP 5: Tampilkan hasil filter
         logging.debug(f"[DEBUG] Filtered services: {active_services_systemd}")
 
-
-        all_sessions_data = read_sessions() 
-        active_sessions_list = []
-        expected_service_prefix = f"stream-{INSTANCE_NAME_IDENTIFIER}-"
-        
-        active_services_systemd = {
-            line.split()[0] 
-            for line in output.strip().split('\n') 
-            if line.split()[0].startswith(expected_service_prefix) # Filter berdasarkan prefix instans
-        }
+        # STEP 6: Ambil data dari sessions.json
+        all_sessions_data = read_sessions()
         json_active_sessions = all_sessions_data.get('active_sessions', [])
+        active_sessions_list = []
         needs_json_update = False
 
+        # STEP 7: Sinkronisasi antara service aktif dan sessions.json
         for service_name_systemd in active_services_systemd:
             sanitized_id_from_systemd_service = service_name_systemd.replace("stream-", "").replace(".service", "")
-            
-            session_json = next((s for s in json_active_sessions if s.get('sanitized_service_id') == sanitized_id_from_systemd_service), None)
+            logging.debug(f"[DEBUG] Cek service id: {sanitized_id_from_systemd_service}")
 
-            if session_json: # Ketika sesi ditemukan di sessions.json
+            session_json = next(
+                (s for s in json_active_sessions if s.get('sanitized_service_id') == sanitized_id_from_systemd_service),
+                None
+            )
+
+            if session_json:
                 actual_schedule_type = session_json.get('scheduleType', 'manual')
-                actual_stop_time_iso = session_json.get('stopTime') 
+                actual_stop_time_iso = session_json.get('stopTime')
                 formatted_display_stop_time = None
-                if actual_stop_time_iso: 
+
+                if actual_stop_time_iso:
                     try:
                         stop_time_dt = datetime.fromisoformat(actual_stop_time_iso)
                         formatted_display_stop_time = stop_time_dt.astimezone(jakarta_tz).strftime('%d-%m-%Y Pukul %H:%M:%S')
-                    except ValueError: pass
-                
+                    except ValueError:
+                        pass
+                        
                 active_sessions_list.append({
                     'id': session_json.get('id'), 
                     'name': session_json.get('id'), 

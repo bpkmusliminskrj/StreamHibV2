@@ -901,6 +901,8 @@ def get_videos_list_data():
 
 def get_active_sessions_data():
     try:
+        # DEBUG: Log INSTANCE_NAME_IDENTIFIER yang digunakan
+        logging.debug(f"DEBUG_GET_ACTIVE: INSTANCE_NAME_IDENTIFIER saat ini: {INSTANCE_NAME_IDENTIFIER}")
         output = subprocess.check_output(["systemctl", "list-units", "--type=service", "--state=running"], text=True)
         all_sessions_data = read_sessions() 
         active_sessions_list = []

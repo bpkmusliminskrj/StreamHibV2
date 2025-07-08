@@ -24,8 +24,6 @@ import time
 import paramiko
 import scp
 import threading
-import sys
-import hashlib
 
 # Dapatkan DIRECTORY_BASE dari variabel lingkungan atau gunakan default
 # Ini akan menjadi direktori akar untuk instans StreamHibV2 ini (misal /root/StreamHibV2-user1)
@@ -54,11 +52,8 @@ LOG_FILE_PATH = os.path.join(DIRECTORY_BASE, 'streamhib_instance.log') # Jalur f
 logging.basicConfig(
     level=logging.DEBUG, # Level logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     format='%(asctime)s [%(levelname)s] %(message)s',
-    # Tambahkan 'handlers' ini untuk memastikan log juga ke stdout
-    handlers=[
-        logging.FileHandler(LOG_FILE_PATH, mode='a'),
-        logging.StreamHandler(sys.stdout) # Ini akan mengirim log ke stdout (yang ditangkap journalctl)
-    ]
+    filename=LOG_FILE_PATH, # Arahkan log ke file spesifik instans
+    filemode='a' # Mode 'a' untuk append (menambahkan ke file yang sudah ada)
 )
 # ---- Mulai Penambahan Kode Baru di Sini untuk Kuota ----
 # Ekstrak nama pengguna instance dari nama direktori, misalnya "user1" dari "/root/StreamHibV2-user1"
@@ -889,57 +884,27 @@ def get_videos_list_data():
 
 def get_active_sessions_data():
     try:
-        # STEP 1: Logging identifier
-        logging.debug(f"[DEBUG] INSTANCE_NAME_IDENTIFIER = {INSTANCE_NAME_IDENTIFIER!r}")
-
-        # STEP 2: Ambil daftar service yang sedang aktif
-        output = subprocess.check_output(
-            ["systemctl", "list-units", "--type=service", "--state=running"],
-            text=True
-        )
-
-        # STEP 3: Tampilkan semua baris systemctl (debug)
-        for line in output.strip().split('\n'):
-            logging.debug(f"[DEBUG] Systemd line: {line}")
-
-        # STEP 4: Filter service berdasarkan prefix
-        expected_service_prefix = f"stream-{INSTANCE_NAME_IDENTIFIER}-"
-        active_services_systemd = {
-            line.split()[0]
-            for line in output.strip().split('\n')
-            if line.split()[0].startswith(expected_service_prefix)
-        }
-
-        # STEP 5: Tampilkan hasil filter
-        logging.debug(f"[DEBUG] Filtered services: {active_services_systemd}")
-
-        # STEP 6: Ambil data dari sessions.json
-        all_sessions_data = read_sessions()
-        json_active_sessions = all_sessions_data.get('active_sessions', [])
+        output = subprocess.check_output(["systemctl", "list-units", "--type=service", "--state=running"], text=True)
+        all_sessions_data = read_sessions() 
         active_sessions_list = []
+        active_services_systemd = {line.split()[0] for line in output.strip().split('\n') if "stream-" in line}
+        json_active_sessions = all_sessions_data.get('active_sessions', [])
         needs_json_update = False
 
-        # STEP 7: Sinkronisasi antara service aktif dan sessions.json
         for service_name_systemd in active_services_systemd:
             sanitized_id_from_systemd_service = service_name_systemd.replace("stream-", "").replace(".service", "")
-            logging.debug(f"[DEBUG] Cek service id: {sanitized_id_from_systemd_service}")
+            
+            session_json = next((s for s in json_active_sessions if s.get('sanitized_service_id') == sanitized_id_from_systemd_service), None)
 
-            session_json = next(
-                (s for s in json_active_sessions if s.get('sanitized_service_id') == sanitized_id_from_systemd_service),
-                None
-            )
-
-            if session_json:
+            if session_json: # Ketika sesi ditemukan di sessions.json
                 actual_schedule_type = session_json.get('scheduleType', 'manual')
-                actual_stop_time_iso = session_json.get('stopTime')
+                actual_stop_time_iso = session_json.get('stopTime') 
                 formatted_display_stop_time = None
-
-                if actual_stop_time_iso:
+                if actual_stop_time_iso: 
                     try:
                         stop_time_dt = datetime.fromisoformat(actual_stop_time_iso)
                         formatted_display_stop_time = stop_time_dt.astimezone(jakarta_tz).strftime('%d-%m-%Y Pukul %H:%M:%S')
-                    except ValueError:
-                        pass
+                    except ValueError: pass
                         
                 active_sessions_list.append({
                     'id': session_json.get('id'), 

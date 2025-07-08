@@ -808,7 +808,7 @@ def sanitize_for_service_name(session_name_original):
 def create_service_file(session_name_original, video_path, platform_url, stream_key):
     # Gunakan session_name_original untuk deskripsi, tapi nama service disanitasi
     sanitized_service_part = sanitize_for_service_name(session_name_original)
-    service_name = f"stream-{sanitized_service_part}.service"
+    service_name = f"stream-{INSTANCE_NAME_IDENTIFIER}-{sanitized_service_part}.service"
     # Pastikan service_name unik jika sanitasi menghasilkan nama yang sama untuk session_name_original yang berbeda
     # Ini bisa diatasi dengan menambahkan hash pendek atau timestamp jika diperlukan, tapi untuk sekarang kita jaga sederhana.
     # Jika ada potensi konflik nama service yang tinggi, pertimbangkan untuk menggunakan UUID atau hash dari session_name_original.
@@ -900,13 +900,12 @@ def get_active_sessions_data():
 
         # STEP 3: Buat dan log prefix
         expected_service_prefix = f"stream-{INSTANCE_NAME_IDENTIFIER}-"
-        active_services_systemd = {
-            line.split()[0]
-            for line in output.strip().split('\n')
-            if line.split()[0].startswith(expected_service_prefix)
-            and "stream-" in line
-        }
 
+active_services_systemd = {
+    line.split()[0]
+    for line in output.strip().split('\n')
+    if line.split()[0].startswith(expected_service_prefix)  # Hanya milik instans ini
+}
         # STEP 3: Log hasil filter
         logging.debug(f"[DEBUG] Filtered systemd services: {active_services_systemd}")
 

@@ -799,25 +799,13 @@ def add_or_update_session_in_list(session_list, new_session_item):
     return updated_list
 
 def sanitize_for_service_name(session_name_original):
-    # Gunakan INSTANCE_NAME_IDENTIFIER (misal "utama", "user1") untuk memastikan keunikan GLOBAL
-    unique_prefix = INSTANCE_NAME_IDENTIFIER 
-
-    # Gabungkan prefix dengan nama sesi asli
-    combined_name = f"{unique_prefix}-{session_name_original}"
-
-    # Lakukan sanitasi dasar
-    sanitized = re.sub(r'[^\w-]', '-', str(combined_name))
+    # Fungsi ini HANYA untuk membuat nama file service yang aman.
+    # Ganti karakter non-alfanumerik (kecuali underscore dan strip) dengan strip.
+    # Juga pastikan tidak terlalu panjang dan tidak dimulai/diakhiri dengan strip.
+    sanitized = re.sub(r'[^\w-]', '-', str(session_name_original))
     sanitized = re.sub(r'-+', '-', sanitized) # Ganti strip berurutan dengan satu strip
     sanitized = sanitized.strip('-') # Hapus strip di awal/akhir
-
-    # Tambahkan hash pendek dari session_name_original untuk menangani kasus:
-    # 1. Nama sesi yang sangat mirip setelah sanitasi (misal "Live Stream" dan "live stream").
-    # 2. Memberikan keunikan ekstra jika nama_instans dan nama_sesi sangat pendek/generik.
-    short_hash = hashlib.md5(session_name_original.encode()).hexdigest()[:6] # Ambil 6 karakter pertama
-
-    final_sanitized_name = f"{sanitized}-{short_hash}"
-
-    return final_sanitized_name[:60] # Batasi panjang total untuk nama file systemd
+    return sanitized[:50] # Batasi panjang untuk keamanan nama file
 
 def create_service_file(session_name_original, video_path, platform_url, stream_key):
     # Gunakan session_name_original untuk deskripsi, tapi nama service disanitasi

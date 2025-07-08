@@ -889,25 +889,28 @@ def get_videos_list_data():
 
 def get_active_sessions_data():
     try:
-        # STEP 1: Log INSTANCE_NAME_IDENTIFIER
+        # DEBUG: Log identifier
         logging.debug(f"[DEBUG] INSTANCE_NAME_IDENTIFIER = {INSTANCE_NAME_IDENTIFIER!r}")
 
-        output = subprocess.check_output(["systemctl", "list-units", "--type=service", "--state=running"], text=True)
+        output = subprocess.check_output(
+            ["systemctl", "list-units", "--type=service", "--state=running"],
+            text=True
+        )
 
-        # STEP 2: Log semua output systemctl
+        # DEBUG: Log semua layanan aktif
         for line in output.strip().split('\n'):
             logging.debug(f"[DEBUG] Systemd line: {line}")
 
-        # STEP 3: Buat dan log prefix
-        expected_service_prefix = f"stream-{INSTANCE_NAME_IDENTIFIER}-"
+        # Gunakan filter fleksibel: cek apakah ada nama instans di nama layanan
+        active_services_systemd = {
+            line.split()[0]
+            for line in output.strip().split('\n')
+            if INSTANCE_NAME_IDENTIFIER in line and "stream" in line
+        }
 
-active_services_systemd = {
-    line.split()[0]
-    for line in output.strip().split('\n')
-    if line.split()[0].startswith(expected_service_prefix)  # Hanya milik instans ini
-}
-        # STEP 3: Log hasil filter
-        logging.debug(f"[DEBUG] Filtered systemd services: {active_services_systemd}")
+        # DEBUG: Log hasil filter
+        logging.debug(f"[DEBUG] Filtered services: {active_services_systemd}")
+
 
         all_sessions_data = read_sessions() 
         active_sessions_list = []
@@ -917,7 +920,6 @@ active_services_systemd = {
             line.split()[0] 
             for line in output.strip().split('\n') 
             if line.split()[0].startswith(expected_service_prefix) # Filter berdasarkan prefix instans
-            and "stream-" in line # Pastikan itu adalah layanan streamhib
         }
         json_active_sessions = all_sessions_data.get('active_sessions', [])
         needs_json_update = False

@@ -26,6 +26,8 @@ import scp
 import threading
 import sys
 import hashlib
+import eventlet
+eventlet.monkey_patch(all=True)
 
 # Dapatkan DIRECTORY_BASE dari variabel lingkungan atau gunakan default
 # Ini akan menjadi direktori akar untuk instans StreamHibV2 ini (misal /root/StreamHibV2-user1)

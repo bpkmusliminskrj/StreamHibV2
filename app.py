@@ -889,9 +889,27 @@ def get_videos_list_data():
 
 def get_active_sessions_data():
     try:
-        # DEBUG: Log INSTANCE_NAME_IDENTIFIER yang digunakan
-        logging.debug(f"DEBUG_GET_ACTIVE: INSTANCE_NAME_IDENTIFIER saat ini: {INSTANCE_NAME_IDENTIFIER}")
+        # STEP 1: Log INSTANCE_NAME_IDENTIFIER
+        logging.debug(f"[DEBUG] INSTANCE_NAME_IDENTIFIER = {INSTANCE_NAME_IDENTIFIER!r}")
+
         output = subprocess.check_output(["systemctl", "list-units", "--type=service", "--state=running"], text=True)
+
+        # STEP 2: Log semua output systemctl
+        for line in output.strip().split('\n'):
+            logging.debug(f"[DEBUG] Systemd line: {line}")
+
+        # STEP 3: Buat dan log prefix
+        expected_service_prefix = f"stream-{INSTANCE_NAME_IDENTIFIER}-"
+        active_services_systemd = {
+            line.split()[0]
+            for line in output.strip().split('\n')
+            if line.split()[0].startswith(expected_service_prefix)
+            and "stream-" in line
+        }
+
+        # STEP 3: Log hasil filter
+        logging.debug(f"[DEBUG] Filtered systemd services: {active_services_systemd}")
+
         all_sessions_data = read_sessions() 
         active_sessions_list = []
         expected_service_prefix = f"stream-{INSTANCE_NAME_IDENTIFIER}-"
